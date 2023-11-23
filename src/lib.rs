@@ -1,4 +1,6 @@
-use futures::AsyncBufRead;
+use std::error;
+use std::rc::Rc;
+use std::sync::Mutex;
 use wasm_bindgen::prelude::*;
 use web_sys::console;
 use wasm_bindgen::JsCast;
@@ -34,14 +36,36 @@ pub fn main_js() -> Result<(), JsValue> {
         .unwrap();
 
     wasm_bindgen_futures::spawn_local(async move {
-        let (success_tx, success_rx) = futures::channel::oneshot::channel::<()>();
+        let (success_tx, success_rx) = futures::channel::oneshot::channel::<Result<(), JsValue>>();
+        let success_tx = Rc::new(Mutex::new(Some(success_tx)));
+        let error_tx = Rc::clone(&success_tx);
+
         let image = web_sys::HtmlImageElement::new().unwrap();
 
-        let callback = Closure::once(|| {
-            success_tx.send(());
+        let callback = Closure::once(move || {
+            // lock(): Rc<Mutex<Option<Sender>>> -> Result<MutexGuard<Option<Sender>>, Error>
+            // lock() := Rcを安全に外す関数
+            // ok(): Result<MutexGuard<Option<Sender>>, Error> -> Option<MutexGuard<Option<Sender>>>
+            // ok() := Result<T, E>をOption<T>に変換する関数
+            // and_then: Option<MutexGuard<Option<Sender>>> -> MutexGuard<Option<Sender>>
+            // and_then() := OptionがSomeだった場合にその中身を引数の関数に与える関数
+            // take: MutexGuard<Option<Sender>> -> Option<Sender>
+            // Mutexを外したのではなく, Mutexを無視して値を取り出しただけ.
+            // 正確には変換しているわけではなく, 取り出して移している.
+            // take() := Optionから値を取り出す関数
+            if let Some(success_tx) = success_tx.lock().ok().and_then(|mut opt| opt.take()) {
+                success_tx.send(Ok(()));
+            }
+        });
+
+        let error_callback = Closure::once(move |err| {
+            if let Some(error_tx) = error_tx.lock().ok().and_then(|mut opt| opt.take()) {
+                error_tx.send(Err(err));
+            }
         });
 
         image.set_onload(Some(callback.as_ref().unchecked_ref()));
+        image.set_onerror(Some(error_callback.as_ref().unchecked_ref()));
         image.set_src("Idle (1).png");
 
         success_rx.await;
