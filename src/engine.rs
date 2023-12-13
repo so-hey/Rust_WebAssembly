@@ -23,7 +23,6 @@ pub struct GameLoop {
     last_frame: f64,
     accumulated_delta: f32,
 }
-type SharedLoopClosure = Rc<RefCell<Option<LoopClosure>>>;
 
 impl GameLoop {
     pub async fn start(mut game: impl Game + 'static) -> Result<()> {

@@ -12,6 +12,12 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsValue;
 use web_sys::HtmlImageElement;
 
+#[derive(Clone, Copy)]
+pub struct Point {
+    pub x: i16,
+    pub y: i16,
+}
+
 #[derive(Deserialize)]
 struct SheetRect {
     x: i16,
@@ -34,6 +40,7 @@ pub struct WalkTheDog {
     image: Option<HtmlImageElement>,
     sheet: Option<Sheet>,
     frame: u8,
+    position: Point,
 }
 
 #[async_trait(?Send)]
@@ -47,11 +54,27 @@ impl Game for WalkTheDog {
             image: image,
             sheet: sheet,
             frame: self.frame,
+            position: self.position,
         }))
     }
 
     fn update(&mut self, keystate: &KeyState) {
-        self.frame = (self.frame + 1) % 24;
+        let mut velocity = Point { x: 0, y: 0 };
+        if keystate.is_pressed("ArrowDown") {
+            velocity.y += 3;
+        }
+        if keystate.is_pressed("ArrowUp") {
+            velocity.y -= 3;
+        }
+        if keystate.is_pressed("ArrowRight") {
+            velocity.x += 3;
+        }
+        if keystate.is_pressed("ArrowLeft") {
+            velocity.x -= 3;
+        }
+
+        self.position.x += velocity.x;
+        self.position.y += velocity.y;
     }
 
     fn draw(&self, renderer: &Renderer) {
@@ -80,8 +103,8 @@ impl Game for WalkTheDog {
                     h: sprite.frame.h.into(),
                 },
                 &Rect {
-                    x: 300.0,
-                    y: 300.0,
+                    x: self.position.x.into(),
+                    y: self.position.y.into(),
                     w: sprite.frame.w.into(),
                     h: sprite.frame.h.into(),
                 },
@@ -96,6 +119,7 @@ impl WalkTheDog {
             image: None,
             sheet: None,
             frame: 0,
+            position: Point { x: 0, y: 0 },
         }
     }
 }
