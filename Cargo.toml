@@ -45,7 +45,7 @@ async-trait = "0.1.52"
 version = "0.3.55"
 features = ["console", "Window", "Document", "HtmlCanvasElement",
             "CanvasRenderingContext2d", "Element", "HtmlImageElement",
-            "Response", "Performance"]
+            "Response", "Performance", "KeyboardEvent"]
 
 # These crates are used for running unit tests.
 [dev-dependencies]

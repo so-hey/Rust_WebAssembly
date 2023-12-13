@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     browser,
-    engine::{self, Game, GameLoop, Rect, Renderer},
+    engine::{self, Game, GameLoop, KeyState, Rect, Renderer},
 };
 use anyhow::Result;
 use async_trait::async_trait;
@@ -50,7 +50,7 @@ impl Game for WalkTheDog {
         }))
     }
 
-    fn update(&mut self) {
+    fn update(&mut self, keystate: &KeyState) {
         self.frame = (self.frame + 1) % 24;
     }
 
