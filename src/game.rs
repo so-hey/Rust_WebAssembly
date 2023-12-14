@@ -74,6 +74,7 @@ impl Game for WalkTheDog {
         }
 
         self.position += velocity;
+        self.rhb.as_mut().unwrap().update();
     }
 
     fn draw(&self, renderer: &Renderer) {
@@ -170,6 +171,16 @@ impl RedHatBoyStateMachine {
             RedHatBoyStateMachine::Running(state) => &state.context(),
         }
     }
+
+    fn update(self) -> Self {
+        match self {
+            RedHatBoyStateMachine::Idle(mut state) => {
+                state.context.frame = (state.context.frame + 1) % 30;
+                RedHatBoyStateMachine::Idle(state)
+            }
+            RedHatBoyStateMachine::Running(_) => self,
+        }
+    }
 }
 
 struct RedHatBoy {
@@ -216,6 +227,10 @@ impl RedHatBoy {
             },
         );
     }
+
+    fn update(&mut self) {
+        self.state_machine = self.state_machine.update();
+    }
 }
 
 use red_hat_boy_states::*;
@@ -240,7 +255,7 @@ mod red_hat_boy_states {
 
     #[derive(Copy, Clone)]
     pub struct RedHatBoyState<S> {
-        context: RedHatBoyContext,
+        pub context: RedHatBoyContext,
         _state: S,
     }
     impl<S> RedHatBoyState<S> {
