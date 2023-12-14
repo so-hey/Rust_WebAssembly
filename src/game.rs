@@ -175,10 +175,13 @@ impl RedHatBoyStateMachine {
     fn update(self) -> Self {
         match self {
             RedHatBoyStateMachine::Idle(mut state) => {
-                state.context.frame = (state.context.frame + 1) % 30;
+                state.update();
                 RedHatBoyStateMachine::Idle(state)
             }
-            RedHatBoyStateMachine::Running(_) => self,
+            RedHatBoyStateMachine::Running(mut state) => {
+                state.update();
+                RedHatBoyStateMachine::Running(state)
+            }
         }
     }
 }
@@ -240,6 +243,8 @@ mod red_hat_boy_states {
     const FLOOR: i16 = 475;
     const IDLE_FRAME_NAME: &str = "Idle";
     const RUN_FRAME_NAME: &str = "Run";
+    const IDLE_FRAMES: u8 = 29;
+    const RUNNING_FRAMES: u8 = 23;
 
     #[derive(Copy, Clone)]
     pub struct Idle;
@@ -251,6 +256,13 @@ mod red_hat_boy_states {
         pub frame: u8,
         pub position: Point,
         pub velocity: Point,
+    }
+
+    impl RedHatBoyContext {
+        pub fn update(mut self, frame_count: u8) -> Self {
+            self.frame = (self.frame + 1) % (frame_count + 1);
+            self
+        }
     }
 
     #[derive(Copy, Clone)]
@@ -286,11 +298,19 @@ mod red_hat_boy_states {
         pub fn frame_name(&self) -> &str {
             IDLE_FRAME_NAME
         }
+
+        pub fn update(&mut self) {
+            self.context = self.context.update(IDLE_FRAMES);
+        }
     }
 
     impl RedHatBoyState<Running> {
         pub fn frame_name(&self) -> &str {
             RUN_FRAME_NAME
+        }
+
+        pub fn update(&mut self) {
+            self.context = self.context.update(RUNNING_FRAMES);
         }
     }
 }
