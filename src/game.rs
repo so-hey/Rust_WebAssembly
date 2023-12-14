@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     browser,
-    engine::{self, Game, GameLoop, KeyState, Rect, Renderer},
+    engine::{self, Game, GameLoop, KeyState, Point, Rect, Renderer},
 };
 use anyhow::Result;
 use async_trait::async_trait;
@@ -11,12 +11,6 @@ use serde::Deserialize;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsValue;
 use web_sys::HtmlImageElement;
-
-#[derive(Clone, Copy)]
-pub struct Point {
-    pub x: i16,
-    pub y: i16,
-}
 
 #[derive(Deserialize)]
 struct SheetRect {
@@ -73,8 +67,7 @@ impl Game for WalkTheDog {
             velocity.x -= 3;
         }
 
-        self.position.x += velocity.x;
-        self.position.y += velocity.y;
+        self.position += velocity;
     }
 
     fn draw(&self, renderer: &Renderer) {
