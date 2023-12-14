@@ -1,4 +1,4 @@
-use std::{char::REPLACEMENT_CHARACTER, collections::HashMap};
+use std::collections::HashMap;
 
 use crate::{
     browser,
@@ -98,6 +98,14 @@ impl From<RedHatBoyState<Sliding>> for RedHatBoyStateMachine {
         RedHatBoyStateMachine::Sliding(state)
     }
 }
+impl From<SlidingEndState> for RedHatBoyStateMachine {
+    fn from(end_state: SlidingEndState) -> Self {
+        match end_state {
+            SlidingEndState::Complete(running_state) => running_state.into(),
+            SlidingEndState::Sliding(sliding_state) => sliding_state.into(),
+        }
+    }
+}
 
 pub enum Event {
     Run,
@@ -112,6 +120,7 @@ impl RedHatBoyStateMachine {
             (RedHatBoyStateMachine::Running(state), Event::Slide) => state.slide().into(),
             (RedHatBoyStateMachine::Idle(state), Event::Update) => state.update().into(),
             (RedHatBoyStateMachine::Running(state), Event::Update) => state.update().into(),
+            (RedHatBoyStateMachine::Sliding(state), Event::Update) => state.update().into(),
             _ => self,
         }
     }
@@ -309,9 +318,27 @@ mod red_hat_boy_states {
             SLIDING_FRAME_NAME
         }
 
-        pub fn update(&mut self) {
+        pub fn update(mut self) -> SlidingEndState {
             self.context = self.context.update(SLIDING_FRAMES);
+
+            if self.context.frame >= SLIDING_FRAMES {
+                SlidingEndState::Complete(self.stand())
+            } else {
+                SlidingEndState::Sliding(self)
+            }
         }
+
+        pub fn stand(self) -> RedHatBoyState<Running> {
+            RedHatBoyState {
+                context: self.context.reset_frame(),
+                _state: Running,
+            }
+        }
+    }
+
+    pub enum SlidingEndState {
+        Complete(RedHatBoyState<Running>),
+        Sliding(RedHatBoyState<Sliding>),
     }
 }
 
