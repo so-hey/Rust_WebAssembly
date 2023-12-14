@@ -6,7 +6,6 @@ use crate::{
 };
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use futures::io::ReadExact;
 use gloo_utils::format::JsValueSerdeExt;
 use serde::Deserialize;
 use wasm_bindgen::prelude::*;
@@ -32,10 +31,6 @@ pub struct Sheet {
 }
 
 pub struct WalkTheDog {
-    image: Option<HtmlImageElement>,
-    sheet: Option<Sheet>,
-    frame: u8,
-    position: Point,
     rhb: Option<RedHatBoy>,
 }
 
@@ -47,10 +42,6 @@ impl Game for WalkTheDog {
         let image = Some(engine::load_image("rhb.png").await?);
 
         Ok(Box::new(WalkTheDog {
-            image: image.clone(),
-            sheet: sheet.clone(),
-            frame: self.frame,
-            position: self.position,
             rhb: Some(RedHatBoy::new(
                 sheet.clone().ok_or_else(|| anyhow!("No Sheet Present"))?,
                 image.clone().ok_or_else(|| anyhow!("No Image Present"))?,
@@ -59,56 +50,18 @@ impl Game for WalkTheDog {
     }
 
     fn update(&mut self, keystate: &KeyState) {
-        let mut velocity = Point { x: 0, y: 0 };
-        if keystate.is_pressed("ArrowDown") {
-            velocity.y += 3;
-        }
-        if keystate.is_pressed("ArrowUp") {
-            velocity.y -= 3;
-        }
         if keystate.is_pressed("ArrowRight") {
-            velocity.x += 3;
+            self.rhb.as_mut().unwrap().run_right();
         }
-        if keystate.is_pressed("ArrowLeft") {
-            velocity.x -= 3;
-        }
-
-        self.position += velocity;
         self.rhb.as_mut().unwrap().update();
     }
 
     fn draw(&self, renderer: &Renderer) {
-        let current_sprite = (self.frame / 3) + 1;
-        let frame_name = format!("Run ({}).png", current_sprite);
-        let sprite = self
-            .sheet
-            .as_ref()
-            .and_then(|sheet| sheet.frames.get(&frame_name))
-            .expect("Cell not found");
-
         renderer.clear(&Rect {
             x: 0.0,
             y: 0.0,
             w: 600.0,
             h: 600.0,
-        });
-
-        self.image.as_ref().map(|image| {
-            renderer.draw_image(
-                &image,
-                &Rect {
-                    x: sprite.frame.x.into(),
-                    y: sprite.frame.y.into(),
-                    w: sprite.frame.w.into(),
-                    h: sprite.frame.h.into(),
-                },
-                &Rect {
-                    x: self.position.x.into(),
-                    y: self.position.y.into(),
-                    w: sprite.frame.w.into(),
-                    h: sprite.frame.h.into(),
-                },
-            )
         });
 
         self.rhb.as_ref().unwrap().draw(renderer);
@@ -117,13 +70,7 @@ impl Game for WalkTheDog {
 
 impl WalkTheDog {
     fn new() -> Self {
-        WalkTheDog {
-            image: None,
-            sheet: None,
-            frame: 0,
-            position: Point { x: 0, y: 0 },
-            rhb: None,
-        }
+        WalkTheDog { rhb: None }
     }
 }
 
@@ -234,6 +181,10 @@ impl RedHatBoy {
     fn update(&mut self) {
         self.state_machine = self.state_machine.update();
     }
+
+    fn run_right(&mut self) {
+        self.state_machine = self.state_machine.transition(Event::Run);
+    }
 }
 
 use red_hat_boy_states::*;
@@ -245,6 +196,7 @@ mod red_hat_boy_states {
     const RUN_FRAME_NAME: &str = "Run";
     const IDLE_FRAMES: u8 = 29;
     const RUNNING_FRAMES: u8 = 23;
+    const RUNNING_SPEED: i16 = 3;
 
     #[derive(Copy, Clone)]
     pub struct Idle;
@@ -261,6 +213,17 @@ mod red_hat_boy_states {
     impl RedHatBoyContext {
         pub fn update(mut self, frame_count: u8) -> Self {
             self.frame = (self.frame + 1) % (frame_count + 1);
+            self.position += self.velocity;
+            self
+        }
+
+        fn reset_frame(mut self) -> Self {
+            self.frame = 0;
+            self
+        }
+
+        fn run_right(mut self) -> Self {
+            self.velocity.x += RUNNING_SPEED;
             self
         }
     }
@@ -290,7 +253,7 @@ mod red_hat_boy_states {
 
         pub fn run(self) -> RedHatBoyState<Running> {
             RedHatBoyState {
-                context: self.context,
+                context: self.context.reset_frame().run_right(),
                 _state: Running {},
             }
         }
