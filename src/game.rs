@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     browser,
-    engine::{self, Game, GameLoop, KeyState, Rect, Renderer},
+    engine::{self, Game, GameLoop, Image, KeyState, Point, Rect, Renderer},
 };
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
@@ -30,9 +30,14 @@ pub struct Sheet {
     frames: HashMap<String, Cell>,
 }
 
+pub struct Walk {
+    boy: RedHatBoy,
+    background: Image,
+}
+
 pub enum WalkTheDog {
     Loading,
-    Loaded(RedHatBoy),
+    Loaded(Walk),
 }
 
 #[async_trait(?Send)]
@@ -41,29 +46,33 @@ impl Game for WalkTheDog {
         match self {
             WalkTheDog::Loading => {
                 let json = browser::fetch_json("rhb.json").await?;
+                let background = engine::load_image("BG.png").await?;
 
                 let rhb = RedHatBoy::new(
                     json.into_serde::<Sheet>()?,
                     engine::load_image("rhb.png").await?,
                 );
-                Ok(Box::new(WalkTheDog::Loaded(rhb)))
+                Ok(Box::new(WalkTheDog::Loaded(Walk {
+                    boy: rhb,
+                    background: Image::new(background, Point { x: 0, y: 0 }),
+                })))
             }
             WalkTheDog::Loaded(_) => Err(anyhow!("Error: Game is already initialized!")),
         }
     }
 
     fn update(&mut self, keystate: &KeyState) {
-        if let WalkTheDog::Loaded(rhb) = self {
+        if let WalkTheDog::Loaded(walk) = self {
             if keystate.is_pressed("ArrowRight") {
-                rhb.run_right();
+                walk.boy.run_right();
             }
             if keystate.is_pressed("ArrowDown") {
-                rhb.slide();
+                walk.boy.slide();
             }
-            if keystate.is_pressed("ArrowUp") {
-                rhb.jump();
+            if keystate.is_pressed("Space") {
+                walk.boy.jump();
             }
-            rhb.update();
+            walk.boy.update();
         }
     }
 
@@ -75,8 +84,9 @@ impl Game for WalkTheDog {
             h: 600.0,
         });
 
-        if let WalkTheDog::Loaded(rhb) = self {
-            rhb.draw(renderer);
+        if let WalkTheDog::Loaded(walk) = self {
+            walk.background.draw(renderer);
+            walk.boy.draw(renderer);
         }
     }
 }
