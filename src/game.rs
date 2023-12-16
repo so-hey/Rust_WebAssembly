@@ -1,38 +1,20 @@
-use std::collections::HashMap;
-
 use crate::{
     browser,
-    engine::{self, Game, GameLoop, Image, KeyState, Point, Rect, Renderer},
+    engine::{
+        self, Cell, Game, GameLoop, Image, KeyState, Point, Rect, Renderer, Sheet, SheetRect,
+    },
 };
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use gloo_utils::format::JsValueSerdeExt;
-use serde::Deserialize;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsValue;
 use web_sys::HtmlImageElement;
 
-#[derive(Deserialize, Clone)]
-struct SheetRect {
-    x: i16,
-    y: i16,
-    w: i16,
-    h: i16,
-}
-
-#[derive(Deserialize, Clone)]
-struct Cell {
-    frame: SheetRect,
-}
-
-#[derive(Deserialize, Clone)]
-pub struct Sheet {
-    frames: HashMap<String, Cell>,
-}
-
 pub struct Walk {
     boy: RedHatBoy,
     background: Image,
+    stone: Image,
 }
 
 pub enum WalkTheDog {
@@ -47,6 +29,7 @@ impl Game for WalkTheDog {
             WalkTheDog::Loading => {
                 let json = browser::fetch_json("rhb.json").await?;
                 let background = engine::load_image("BG.png").await?;
+                let stone = engine::load_image("Stone.png").await?;
 
                 let rhb = RedHatBoy::new(
                     json.into_serde::<Sheet>()?,
@@ -55,6 +38,7 @@ impl Game for WalkTheDog {
                 Ok(Box::new(WalkTheDog::Loaded(Walk {
                     boy: rhb,
                     background: Image::new(background, Point { x: 0, y: 0 }),
+                    stone: Image::new(stone, Point { x: 150, y: 546 }),
                 })))
             }
             WalkTheDog::Loaded(_) => Err(anyhow!("Error: Game is already initialized!")),
@@ -87,6 +71,7 @@ impl Game for WalkTheDog {
         if let WalkTheDog::Loaded(walk) = self {
             walk.background.draw(renderer);
             walk.boy.draw(renderer);
+            walk.stone.draw(renderer);
         }
     }
 }
@@ -229,8 +214,10 @@ impl RedHatBoy {
                 h: sprite.frame.h.into(),
             },
             &Rect {
-                x: self.state_machine.context().position.x.into(),
-                y: self.state_machine.context().position.y.into(),
+                x: (self.state_machine.context().position.x + sprite.sprite_source_size.x as i16)
+                    .into(),
+                y: (self.state_machine.context().position.y + sprite.sprite_source_size.y as i16)
+                    .into(),
                 w: sprite.frame.w.into(),
                 h: sprite.frame.h.into(),
             },
@@ -259,7 +246,8 @@ use red_hat_boy_states::*;
 mod red_hat_boy_states {
     use crate::engine::Point;
     // 地面の高さ
-    const FLOOR: i16 = 475;
+    const FLOOR: i16 = 479;
+    const STARTING_POINT: i16 = -20;
     // rhb.jsonにおけるフレームの名前
     const IDLE_FRAME_NAME: &str = "Idle";
     const RUN_FRAME_NAME: &str = "Run";
@@ -325,7 +313,10 @@ mod red_hat_boy_states {
             RedHatBoyState {
                 context: RedHatBoyContext {
                     frame: 0,
-                    position: Point { x: 0, y: FLOOR },
+                    position: Point {
+                        x: STARTING_POINT,
+                        y: FLOOR,
+                    },
                     velocity: Point { x: 0, y: 0 },
                 },
                 _state: Idle {},

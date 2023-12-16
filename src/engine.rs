@@ -4,6 +4,7 @@ use futures::channel::{
     mpsc::{unbounded, UnboundedReceiver},
     oneshot::channel,
 };
+use serde::Deserialize;
 use std::{cell::RefCell, collections::HashMap, ops::AddAssign, rc::Rc, sync::Mutex};
 use wasm_bindgen::JsCast;
 use web_sys::{CanvasRenderingContext2d, HtmlImageElement};
@@ -21,6 +22,26 @@ impl AddAssign for Point {
         self.x += rhs.x;
         self.y += rhs.y;
     }
+}
+
+#[derive(Deserialize, Clone)]
+pub struct SheetRect {
+    pub x: i16,
+    pub y: i16,
+    pub w: i16,
+    pub h: i16,
+}
+
+#[derive(Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Cell {
+    pub frame: SheetRect,
+    pub sprite_source_size: SheetRect,
+}
+
+#[derive(Deserialize, Clone)]
+pub struct Sheet {
+    pub frames: HashMap<String, Cell>,
 }
 
 #[async_trait(?Send)]
