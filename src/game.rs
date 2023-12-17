@@ -27,18 +27,18 @@ impl Game for WalkTheDog {
     async fn initialize(&self) -> Result<Box<dyn Game>> {
         match self {
             WalkTheDog::Loading => {
-                let json = browser::fetch_json("rhb.json").await?;
+                let json = browser::fetch_json("rhb_trimmed.json").await?;
                 let background = engine::load_image("BG.png").await?;
                 let stone = engine::load_image("Stone.png").await?;
 
                 let rhb = RedHatBoy::new(
                     json.into_serde::<Sheet>()?,
-                    engine::load_image("rhb.png").await?,
+                    engine::load_image("rhb_trimmed.png").await?,
                 );
                 Ok(Box::new(WalkTheDog::Loaded(Walk {
                     boy: rhb,
                     background: Image::new(background, Point { x: 0, y: 0 }),
-                    stone: Image::new(stone, Point { x: 150, y: 546 }),
+                    stone: Image::new(stone, Point { x: 400, y: 546 }),
                 })))
             }
             WalkTheDog::Loaded(_) => Err(anyhow!("Error: Game is already initialized!")),
@@ -96,6 +96,7 @@ enum RedHatBoyStateMachine {
     Sliding(RedHatBoyState<Sliding>),
     Jumping(RedHatBoyState<Jumping>),
     Falling(RedHatBoyState<Falling>),
+    KnockedOut(RedHatBoyState<KnockedOut>),
 }
 impl From<RedHatBoyState<Idle>> for RedHatBoyStateMachine {
     fn from(state: RedHatBoyState<Idle>) -> Self {
@@ -136,6 +137,19 @@ impl From<JumpingEndState> for RedHatBoyStateMachine {
 impl From<RedHatBoyState<Falling>> for RedHatBoyStateMachine {
     fn from(state: RedHatBoyState<Falling>) -> Self {
         RedHatBoyStateMachine::Falling(state)
+    }
+}
+impl From<RedHatBoyState<KnockedOut>> for RedHatBoyStateMachine {
+    fn from(state: RedHatBoyState<KnockedOut>) -> Self {
+        RedHatBoyStateMachine::KnockedOut(state)
+    }
+}
+impl From<FallingEndState> for RedHatBoyStateMachine {
+    fn from(end_state: FallingEndState) -> Self {
+        match end_state {
+            FallingEndState::Complete(knocked_out_state) => knocked_out_state.into(),
+            FallingEndState::Falling(falling_state) => falling_state.into(),
+        }
     }
 }
 
@@ -179,6 +193,7 @@ impl RedHatBoyStateMachine {
             RedHatBoyStateMachine::Sliding(state) => state.frame_name(),
             RedHatBoyStateMachine::Jumping(state) => state.frame_name(),
             RedHatBoyStateMachine::Falling(state) => state.frame_name(),
+            RedHatBoyStateMachine::KnockedOut(state) => state.frame_name(),
         }
     }
 
@@ -189,6 +204,7 @@ impl RedHatBoyStateMachine {
             RedHatBoyStateMachine::Sliding(state) => &state.context(),
             RedHatBoyStateMachine::Jumping(state) => &state.context(),
             RedHatBoyStateMachine::Falling(state) => &state.context(),
+            RedHatBoyStateMachine::KnockedOut(state) => &state.context(),
         }
     }
 
@@ -421,7 +437,6 @@ mod red_hat_boy_states {
 
         pub fn update(mut self) -> SlidingEndState {
             self.context = self.context.update(SLIDING_FRAMES);
-
             if self.context.frame + 1 >= SLIDING_FRAMES {
                 SlidingEndState::Complete(self.stand())
             } else {
@@ -491,10 +506,34 @@ mod red_hat_boy_states {
             FALLING_FRAME_NAME
         }
 
-        pub fn update(mut self) -> Self {
+        pub fn update(mut self) -> FallingEndState {
             self.context = self.context.update(FALLING_FRAMES);
-            self
+            if self.context.frame + 1 >= FALLING_FRAMES {
+                FallingEndState::Complete(self.knock_out())
+            } else {
+                FallingEndState::Falling(self)
+            }
         }
+
+        pub fn knock_out(mut self) -> RedHatBoyState<KnockedOut> {
+            RedHatBoyState {
+                context: self.context,
+                _state: KnockedOut {},
+            }
+        }
+    }
+
+    #[derive(Copy, Clone)]
+    pub struct KnockedOut;
+    impl RedHatBoyState<KnockedOut> {
+        pub fn frame_name(&self) -> &str {
+            FALLING_FRAME_NAME
+        }
+    }
+
+    pub enum FallingEndState {
+        Complete(RedHatBoyState<KnockedOut>),
+        Falling(RedHatBoyState<Falling>),
     }
 }
 
