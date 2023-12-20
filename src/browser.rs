@@ -9,12 +9,6 @@ use web_sys::{
     CanvasRenderingContext2d, Document, HtmlCanvasElement, HtmlImageElement, Response, Window,
 };
 
-macro_rules! log {
-    ( $( $t:tt )* ) => {
-        web_sys::console::log_1(&format!( $( $t )* ).into());
-    };
-}
-
 pub fn window() -> Result<Window> {
     web_sys::window().ok_or_else(|| anyhow!("No Window Found"))
 }
