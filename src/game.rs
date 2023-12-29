@@ -10,6 +10,8 @@ use wasm_bindgen::JsValue;
 use web_sys::HtmlImageElement;
 
 const HEIGHT: i16 = 600;
+const LOW_PLATFORM: i16 = 420;
+const HIGH_PLATFORM: i16 = 375;
 
 macro_rules! log {
     ( $( $t:tt )* ) => {
@@ -43,7 +45,10 @@ impl Game for WalkTheDog {
                 let platform = Platform::new(
                     platform_sheet.into_serde::<Sheet>()?,
                     engine::load_image("tiles.png").await?,
-                    Point { x: 200, y: 400 },
+                    Point {
+                        x: 200,
+                        y: LOW_PLATFORM,
+                    },
                 );
 
                 let rhb = RedHatBoy::new(
@@ -73,15 +78,14 @@ impl Game for WalkTheDog {
                 walk.boy.jump();
             }
             walk.boy.update();
-            if walk
-                .boy
-                .bounding_box()
-                .intersects(&walk.platform.bounding_box())
-            {
-                if walk.boy.velocity_y() > 0 && walk.boy.pos_y() < walk.platform.position.y {
-                    walk.boy.land_on(walk.platform.bounding_box().y);
-                } else {
-                    walk.boy.knock_out();
+
+            for bounding_box in &walk.platform.bounding_boxes() {
+                if walk.boy.bounding_box().intersects(bounding_box) {
+                    if walk.boy.velocity_y() > 0 && walk.boy.pos_y() < walk.platform.position.y {
+                        walk.boy.land_on(bounding_box.y);
+                    } else {
+                        walk.boy.knock_out();
+                    }
                 }
             }
             if walk
@@ -131,7 +135,7 @@ impl Platform {
         }
     }
 
-    fn bounding_box(&self) -> Rect {
+    fn destination_box(&self) -> Rect {
         let platform = self
             .sheet
             .frames
@@ -144,6 +148,35 @@ impl Platform {
             w: (platform.frame.w * 3).into(),
             h: platform.frame.h.into(),
         }
+    }
+
+    fn bounding_boxes(&self) -> Vec<Rect> {
+        const X_OFFSET: f32 = 60.0;
+        const Y_OFFSET: f32 = 54.0;
+        let destination_box = self.destination_box();
+
+        let bounding_box_one = Rect {
+            x: destination_box.x,
+            y: destination_box.y,
+            w: X_OFFSET,
+            h: Y_OFFSET,
+        };
+
+        let bounding_box_two = Rect {
+            x: destination_box.x + X_OFFSET,
+            y: destination_box.y,
+            w: destination_box.w - (X_OFFSET * 2.0),
+            h: destination_box.h,
+        };
+
+        let bounding_box_three = Rect {
+            x: destination_box.x + destination_box.w - X_OFFSET,
+            y: destination_box.y,
+            w: X_OFFSET,
+            h: Y_OFFSET,
+        };
+
+        vec![bounding_box_one, bounding_box_two, bounding_box_three]
     }
 
     fn draw(&self, renderer: &Renderer) {
@@ -161,7 +194,7 @@ impl Platform {
                 w: (platform.frame.w * 3).into(),
                 h: platform.frame.h.into(),
             },
-            &self.bounding_box(),
+            &self.destination_box(),
         );
     }
 }
@@ -263,13 +296,6 @@ impl RedHatBoyStateMachine {
         }
     }
 
-    fn run(self) -> Self {
-        match self {
-            RedHatBoyStateMachine::Idle(state) => RedHatBoyStateMachine::Running(state.run()),
-            _ => self,
-        }
-    }
-
     fn frame_name(&self) -> &str {
         match self {
             RedHatBoyStateMachine::Idle(state) => state.frame_name(),
@@ -334,11 +360,11 @@ impl RedHatBoy {
                 w: sprite.frame.w.into(),
                 h: sprite.frame.h.into(),
             },
-            &self.bounding_box(),
+            &self.destination_box(),
         );
     }
 
-    fn bounding_box(&self) -> Rect {
+    fn destination_box(&self) -> Rect {
         let sprite = self.current_sprite().expect("Cell not found");
 
         Rect {
@@ -349,6 +375,18 @@ impl RedHatBoy {
             w: sprite.frame.w.into(),
             h: sprite.frame.h.into(),
         }
+    }
+
+    fn bounding_box(&self) -> Rect {
+        const X_OFFSET: f32 = 18.0;
+        const Y_OFFSET: f32 = 14.0;
+        const W_OFFSET: f32 = 28.0;
+        let mut bounding_box = self.destination_box();
+        bounding_box.x += X_OFFSET;
+        bounding_box.w -= W_OFFSET;
+        bounding_box.y += Y_OFFSET;
+        bounding_box.h -= Y_OFFSET;
+        bounding_box
     }
 
     fn pos_y(&self) -> i16 {
@@ -447,6 +485,7 @@ mod red_hat_boy_states {
 
         fn stop(mut self) -> Self {
             self.velocity.x = 0;
+            self.velocity.y = GRAVITY;
             self
         }
 
