@@ -26,6 +26,12 @@ pub struct Walk {
     platform: Platform,
 }
 
+impl Walk {
+    fn velocity(&self) -> i16 {
+        -self.boy.walk_speed()
+    }
+}
+
 pub enum WalkTheDog {
     Loading,
     Loaded(Walk),
@@ -78,6 +84,10 @@ impl Game for WalkTheDog {
                 walk.boy.jump();
             }
             walk.boy.update();
+
+            walk.platform.position.x += walk.velocity();
+            walk.stone.move_horizontally(walk.velocity());
+            walk.background.move_horizontally(walk.velocity());
 
             for bounding_box in &walk.platform.bounding_boxes() {
                 if walk.boy.bounding_box().intersects(bounding_box) {
@@ -420,6 +430,10 @@ impl RedHatBoy {
     fn land_on(&mut self, position: f32) {
         self.state_machine = self.state_machine.transition(Event::Land(position))
     }
+
+    fn walk_speed(&self) -> i16 {
+        self.state_machine.context().velocity.x
+    }
 }
 
 use red_hat_boy_states::*;
@@ -462,9 +476,9 @@ mod red_hat_boy_states {
                 self.velocity.y += GRAVITY;
             }
             self.frame = (self.frame + 1) % frame_count;
-            self.position += self.velocity;
+            // self.position += self.velocity;
+            self.position.y += self.velocity.y;
             self.position.y = self.position.y.min(FLOOR);
-            log!("Gravity {}", self.velocity.y);
             self
         }
 

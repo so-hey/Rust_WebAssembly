@@ -5,7 +5,13 @@ use futures::channel::{
     oneshot::channel,
 };
 use serde::Deserialize;
-use std::{cell::RefCell, collections::HashMap, ops::AddAssign, rc::Rc, sync::Mutex};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    ops::{Add, AddAssign},
+    rc::Rc,
+    sync::Mutex,
+};
 use wasm_bindgen::JsCast;
 use web_sys::{CanvasRenderingContext2d, HtmlImageElement};
 
@@ -17,10 +23,19 @@ pub struct Point {
     pub y: i16,
 }
 
+impl Add for Point {
+    type Output = Point;
+    fn add(self, rhs: Self) -> Self::Output {
+        Point {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+        }
+    }
+}
+
 impl AddAssign for Point {
     fn add_assign(&mut self, rhs: Self) {
-        self.x += rhs.x;
-        self.y += rhs.y;
+        *self = *self + rhs;
     }
 }
 
@@ -122,6 +137,11 @@ impl Image {
 
     pub fn bounding_box(&self) -> &Rect {
         &self.bounding_box
+    }
+
+    pub fn move_horizontally(&mut self, distance: i16) {
+        self.bounding_box.x += distance as f32;
+        self.position.x += distance;
     }
 }
 
