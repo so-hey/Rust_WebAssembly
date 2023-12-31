@@ -112,27 +112,20 @@ impl GameLoop {
 
 pub struct Image {
     element: HtmlImageElement,
-    position: Point,
     bounding_box: Rect,
 }
 
 impl Image {
     pub fn new(element: HtmlImageElement, position: Point) -> Self {
-        let bounding_box = Rect {
-            x: position.x.into(),
-            y: position.y.into(),
-            w: element.width() as f32,
-            h: element.height() as f32,
-        };
+        let bounding_box = Rect::new(position, element.width() as i16, element.height() as i16);
         Self {
             element,
-            position,
             bounding_box,
         }
     }
 
     pub fn draw(&self, renderer: &Renderer) {
-        renderer.draw_entire_image(&self.element, &self.position);
+        renderer.draw_entire_image(&self.element, &self.bounding_box.position);
     }
 
     pub fn bounding_box(&self) -> &Rect {
@@ -140,32 +133,71 @@ impl Image {
     }
 
     pub fn move_horizontally(&mut self, distance: i16) {
-        self.set_x(self.position.x + distance);
+        self.set_x(self.bounding_box.x() + distance);
     }
 
     pub fn right(&self) -> i16 {
-        (self.bounding_box.x + self.bounding_box.w) as i16
+        self.bounding_box.right()
     }
 
     pub fn set_x(&mut self, x: i16) {
-        self.bounding_box.x = x as f32;
-        self.position.x = x;
+        self.bounding_box.set_x(x);
     }
+
+    // pub fn set_y(&mut self, y: i16) {
+    //     self.bounding_box.set_y(y);
+    //     self.position.y += y;
+    // }
 }
 
 pub struct Rect {
-    pub x: f32,
-    pub y: f32,
-    pub w: f32,
-    pub h: f32,
+    pub position: Point,
+    pub w: i16,
+    pub h: i16,
 }
 
 impl Rect {
+    pub fn new(position: Point, w: i16, h: i16) -> Self {
+        Rect { position, w, h }
+    }
+
+    pub fn new_from_x_y(x: i16, y: i16, w: i16, h: i16) -> Self {
+        Rect {
+            position: Point { x, y },
+            w,
+            h,
+        }
+    }
+
     pub fn intersects(&self, rect: &Rect) -> bool {
-        self.x < (rect.x + rect.w)
-            && self.x + self.w > rect.x
-            && self.y < (rect.y + rect.h)
-            && self.y + self.h > rect.y
+        self.x() < rect.right()
+            && self.right() > rect.x()
+            && self.y() < rect.bottom()
+            && self.bottom() > rect.y()
+    }
+
+    pub fn x(&self) -> i16 {
+        self.position.x
+    }
+
+    pub fn y(&self) -> i16 {
+        self.position.y
+    }
+
+    pub fn right(&self) -> i16 {
+        self.x() + self.w
+    }
+
+    pub fn bottom(&self) -> i16 {
+        self.y() + self.h
+    }
+
+    pub fn set_x(&mut self, x: i16) {
+        self.position.x = x;
+    }
+
+    pub fn set_y(&mut self, y: i16) {
+        self.position.y = y;
     }
 }
 
@@ -175,20 +207,24 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn clear(&self, rect: &Rect) {
-        self.context
-            .clear_rect(rect.x.into(), rect.y.into(), rect.w.into(), rect.h.into());
+        self.context.clear_rect(
+            rect.x().into(),
+            rect.y().into(),
+            rect.w.into(),
+            rect.h.into(),
+        );
     }
 
     pub fn draw_image(&self, image: &HtmlImageElement, frame: &Rect, destination: &Rect) {
         self.context
             .draw_image_with_html_image_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(
                 &image,
-                frame.x.into(),
-                frame.y.into(),
+                frame.x().into(),
+                frame.y().into(),
                 frame.w.into(),
                 frame.h.into(),
-                destination.x.into(),
-                destination.y.into(),
+                destination.x().into(),
+                destination.y().into(),
                 destination.w.into(),
                 destination.h.into(),
             )
