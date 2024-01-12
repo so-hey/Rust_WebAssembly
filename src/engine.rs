@@ -17,7 +17,7 @@ use web_sys::{CanvasRenderingContext2d, HtmlImageElement};
 
 use crate::browser;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct Point {
     pub x: i16,
     pub y: i16,
@@ -150,6 +150,7 @@ impl Image {
     // }
 }
 
+#[derive(Default)]
 pub struct Rect {
     pub position: Point,
     pub w: i16,
