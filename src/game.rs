@@ -16,6 +16,7 @@ use web_sys::HtmlImageElement;
 const HEIGHT: i16 = 600;
 const LOW_PLATFORM: i16 = 420;
 const HIGH_PLATFORM: i16 = 375;
+const FIRST_PLATRFORM: i16 = 200;
 
 macro_rules! log {
     ( $( $t:tt )* ) => {
@@ -53,7 +54,19 @@ impl Game for WalkTheDog {
                 ));
 
                 let platform_sheet = browser::fetch_json("tiles.json").await?;
-                let platform = Platform::new(sprite_sheet.clone(), Point { x: 200, y: 400 });
+                let platform = Platform::new(
+                    sprite_sheet.clone(),
+                    Point {
+                        x: FIRST_PLATRFORM,
+                        y: LOW_PLATFORM,
+                    },
+                    &["13.png", "14.png", "15.png"],
+                    &[
+                        Rect::new_from_x_y(0, 0, 60, 54),
+                        Rect::new_from_x_y(60, 0, 384 - (60 * 2), 93),
+                        Rect::new_from_x_y(384 - 60, 0, 60, 54),
+                    ],
+                );
 
                 let json = browser::fetch_json("rhb_trimmed.json").await?;
                 let rhb = RedHatBoy::new(
@@ -147,9 +160,11 @@ pub trait Obstacle {
     fn right(&self) -> i16;
 }
 
-struct Platform {
+pub struct Platform {
     sheet: Rc<SpriteSheet>,
     position: Point,
+    sprites: Vec<Cell>,
+    bounding_boxes: Vec<Rect>,
 }
 
 impl Obstacle for Platform {
@@ -168,22 +183,32 @@ impl Obstacle for Platform {
     }
 
     fn draw(&self, renderer: &Renderer) {
-        let platform = self.sheet.cell("13.png").expect("13.png does not exist");
-
-        self.sheet.draw(
-            renderer,
-            &Rect::new_from_x_y(
-                platform.frame.x.into(),
-                platform.frame.y.into(),
-                (platform.frame.w * 3).into(),
-                platform.frame.h.into(),
-            ),
-            &self.destination_box(),
-        );
+        let mut x = 0;
+        self.sprites.iter().for_each(|sprite| {
+            self.sheet.draw(
+                renderer,
+                &Rect::new_from_x_y(
+                    sprite.frame.x,
+                    sprite.frame.y,
+                    sprite.frame.w,
+                    sprite.frame.h,
+                ),
+                &Rect::new_from_x_y(
+                    self.position.x + x,
+                    self.position.y,
+                    sprite.frame.w,
+                    sprite.frame.h,
+                ),
+            );
+            x += sprite.frame.w;
+        });
     }
 
     fn move_horizontally(&mut self, x: i16) {
         self.position.x += x;
+        self.bounding_boxes.iter_mut().for_each(|bounding_box| {
+            bounding_box.set_x(bounding_box.position.x + x);
+        })
     }
 
     fn right(&self) -> i16 {
@@ -195,8 +220,34 @@ impl Obstacle for Platform {
 }
 
 impl Platform {
-    fn new(sheet: Rc<SpriteSheet>, position: Point) -> Self {
-        Platform { sheet, position }
+    fn new(
+        sheet: Rc<SpriteSheet>,
+        position: Point,
+        sprite_names: &[&str],
+        bounding_boxes: &[Rect],
+    ) -> Self {
+        let sprites = sprite_names
+            .iter()
+            .filter_map(|sprite_name| sheet.cell(&sprite_name).cloned())
+            .collect();
+        let bounding_boxes = bounding_boxes
+            .iter()
+            .map(|bounding_box| {
+                Rect::new_from_x_y(
+                    bounding_box.x() + position.x,
+                    bounding_box.y() + position.y,
+                    bounding_box.w,
+                    bounding_box.h,
+                )
+            })
+            .collect();
+
+        Platform {
+            sheet,
+            position,
+            sprites,
+            bounding_boxes,
+        }
     }
 
     fn destination_box(&self) -> Rect {
@@ -209,30 +260,8 @@ impl Platform {
         )
     }
 
-    fn bounding_boxes(&self) -> Vec<Rect> {
-        const X_OFFSET: i16 = 60;
-        const Y_OFFSET: i16 = 54;
-        let destination_box = self.destination_box();
-
-        let bounding_box_one = Rect::new(destination_box.position, X_OFFSET, Y_OFFSET);
-
-        let bounding_box_two = Rect::new(
-            destination_box.position + Point { x: X_OFFSET, y: 0 },
-            destination_box.w - (X_OFFSET * 2),
-            destination_box.h,
-        );
-
-        let bounding_box_three = Rect::new(
-            destination_box.position
-                + Point {
-                    x: destination_box.w - X_OFFSET,
-                    y: 0,
-                },
-            X_OFFSET,
-            Y_OFFSET,
-        );
-
-        vec![bounding_box_one, bounding_box_two, bounding_box_three]
+    fn bounding_boxes(&self) -> &Vec<Rect> {
+        &self.bounding_boxes
     }
 }
 
