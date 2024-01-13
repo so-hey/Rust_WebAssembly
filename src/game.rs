@@ -1,6 +1,10 @@
+use std::rc::Rc;
+
 use crate::{
     browser,
-    engine::{self, Cell, Game, GameLoop, Image, KeyState, Point, Rect, Renderer, Sheet},
+    engine::{
+        self, Cell, Game, GameLoop, Image, KeyState, Point, Rect, Renderer, Sheet, SpriteSheet,
+    },
 };
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
@@ -23,6 +27,7 @@ pub struct Walk {
     boy: RedHatBoy,
     background: [Image; 2],
     obstacles: Vec<Box<dyn Obstacle>>,
+    obstacle_sheet: Rc<SpriteSheet>,
 }
 
 impl Walk {
@@ -41,26 +46,23 @@ impl Game for WalkTheDog {
     async fn initialize(&self) -> Result<Box<dyn Game>> {
         match self {
             WalkTheDog::Loading => {
-                let json = browser::fetch_json("rhb_trimmed.json").await?;
-                let background = engine::load_image("BG.png").await?;
-                let stone = engine::load_image("Stone.png").await?;
+                let tiles = browser::fetch_json("tiles.json").await?;
+                let sprite_sheet = Rc::new(SpriteSheet::new(
+                    tiles.into_serde::<Sheet>()?,
+                    engine::load_image("tiles.png").await?,
+                ));
 
                 let platform_sheet = browser::fetch_json("tiles.json").await?;
+                let platform = Platform::new(sprite_sheet.clone(), Point { x: 200, y: 400 });
 
-                let platform = Platform::new(
-                    platform_sheet.into_serde::<Sheet>()?,
-                    engine::load_image("tiles.png").await?,
-                    Point {
-                        x: 200,
-                        y: LOW_PLATFORM,
-                    },
-                );
-
+                let json = browser::fetch_json("rhb_trimmed.json").await?;
                 let rhb = RedHatBoy::new(
                     json.into_serde::<Sheet>()?,
                     engine::load_image("rhb_trimmed.png").await?,
                 );
 
+                let background = engine::load_image("BG.png").await?;
+                let stone = engine::load_image("Stone.png").await?;
                 let background_width = background.width() as i16;
                 Ok(Box::new(WalkTheDog::Loaded(Walk {
                     boy: rhb,
@@ -78,6 +80,7 @@ impl Game for WalkTheDog {
                         Box::new(Barrier::new(Image::new(stone, Point { x: 400, y: 546 }))),
                         Box::new(platform),
                     ],
+                    obstacle_sheet: sprite_sheet,
                 })))
             }
             WalkTheDog::Loaded(_) => Err(anyhow!("Error: Game is already initialized!")),
@@ -145,8 +148,7 @@ pub trait Obstacle {
 }
 
 struct Platform {
-    sheet: Sheet,
-    image: HtmlImageElement,
+    sheet: Rc<SpriteSheet>,
     position: Point,
 }
 
@@ -166,14 +168,10 @@ impl Obstacle for Platform {
     }
 
     fn draw(&self, renderer: &Renderer) {
-        let platform = self
-            .sheet
-            .frames
-            .get("13.png")
-            .expect("13.png does not exist");
+        let platform = self.sheet.cell("13.png").expect("13.png does not exist");
 
-        renderer.draw_image(
-            &self.image,
+        self.sheet.draw(
+            renderer,
             &Rect::new_from_x_y(
                 platform.frame.x.into(),
                 platform.frame.y.into(),
@@ -197,20 +195,12 @@ impl Obstacle for Platform {
 }
 
 impl Platform {
-    fn new(sheet: Sheet, image: HtmlImageElement, position: Point) -> Self {
-        Platform {
-            sheet,
-            image,
-            position,
-        }
+    fn new(sheet: Rc<SpriteSheet>, position: Point) -> Self {
+        Platform { sheet, position }
     }
 
     fn destination_box(&self) -> Rect {
-        let platform = self
-            .sheet
-            .frames
-            .get("13.png")
-            .expect("13.png does not exist");
+        let platform = self.sheet.cell("13.png").expect("13.png does not exist");
 
         Rect::new(
             self.position,
