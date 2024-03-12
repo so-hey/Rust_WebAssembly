@@ -181,7 +181,7 @@ impl Rect {
         Rect { position, w, h }
     }
 
-    pub fn new_from_x_y(x: i16, y: i16, w: i16, h: i16) -> Self {
+    pub const fn new_from_x_y(x: i16, y: i16, w: i16, h: i16) -> Self {
         Rect {
             position: Point { x, y },
             w,

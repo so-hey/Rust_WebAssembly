@@ -2,3 +2,4 @@
 mod browser;
 mod engine;
 mod game;
+mod segments;

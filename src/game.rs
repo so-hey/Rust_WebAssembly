@@ -5,6 +5,7 @@ use crate::{
     engine::{
         self, Cell, Game, GameLoop, Image, KeyState, Point, Rect, Renderer, Sheet, SpriteSheet,
     },
+    segments::stone_and_platform,
 };
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
@@ -14,9 +15,8 @@ use wasm_bindgen::JsValue;
 use web_sys::HtmlImageElement;
 
 const HEIGHT: i16 = 600;
-const LOW_PLATFORM: i16 = 420;
-const HIGH_PLATFORM: i16 = 375;
-const FIRST_PLATRFORM: i16 = 200;
+const TIMELINE_MINIMUM: i16 = 1000;
+const OBSTACLE_BUFFER: i16 = 20;
 
 macro_rules! log {
     ( $( $t:tt )* ) => {
@@ -29,6 +29,8 @@ pub struct Walk {
     background: [Image; 2],
     obstacles: Vec<Box<dyn Obstacle>>,
     obstacle_sheet: Rc<SpriteSheet>,
+    stone: HtmlImageElement,
+    timeline: i16,
 }
 
 impl Walk {
@@ -53,21 +55,6 @@ impl Game for WalkTheDog {
                     engine::load_image("tiles.png").await?,
                 ));
 
-                let platform_sheet = browser::fetch_json("tiles.json").await?;
-                let platform = Platform::new(
-                    sprite_sheet.clone(),
-                    Point {
-                        x: FIRST_PLATRFORM,
-                        y: LOW_PLATFORM,
-                    },
-                    &["13.png", "14.png", "15.png"],
-                    &[
-                        Rect::new_from_x_y(0, 0, 60, 54),
-                        Rect::new_from_x_y(60, 0, 384 - (60 * 2), 93),
-                        Rect::new_from_x_y(384 - 60, 0, 60, 54),
-                    ],
-                );
-
                 let json = browser::fetch_json("rhb_trimmed.json").await?;
                 let rhb = RedHatBoy::new(
                     json.into_serde::<Sheet>()?,
@@ -77,6 +64,8 @@ impl Game for WalkTheDog {
                 let background = engine::load_image("BG.png").await?;
                 let stone = engine::load_image("Stone.png").await?;
                 let background_width = background.width() as i16;
+                let starting_obstacles = stone_and_platform(stone.clone(), sprite_sheet.clone(), 0);
+                let timeline = rightmost(&starting_obstacles);
                 Ok(Box::new(WalkTheDog::Loaded(Walk {
                     boy: rhb,
                     background: [
@@ -89,11 +78,10 @@ impl Game for WalkTheDog {
                             },
                         ),
                     ],
-                    obstacles: vec![
-                        Box::new(Barrier::new(Image::new(stone, Point { x: 400, y: 546 }))),
-                        Box::new(platform),
-                    ],
+                    obstacles: starting_obstacles,
                     obstacle_sheet: sprite_sheet,
+                    stone,
+                    timeline,
                 })))
             }
             WalkTheDog::Loaded(_) => Err(anyhow!("Error: Game is already initialized!")),
@@ -130,6 +118,24 @@ impl Game for WalkTheDog {
             if second_background.right() < 0 {
                 second_background.set_x(first_background.right());
             }
+
+            walk.obstacles.iter_mut().for_each(|obstacle| {
+                obstacle.move_horizontally(velocity);
+                obstacle.check_intersection(&mut walk.boy);
+            });
+
+            if walk.timeline < TIMELINE_MINIMUM {
+                let mut next_obstacles = stone_and_platform(
+                    walk.stone.clone(),
+                    walk.obstacle_sheet.clone(),
+                    walk.timeline + OBSTACLE_BUFFER,
+                );
+
+                walk.timeline = rightmost(&next_obstacles);
+                walk.obstacles.append(&mut next_obstacles);
+            } else {
+                walk.timeline += velocity;
+            }
         }
     }
 
@@ -158,6 +164,14 @@ pub trait Obstacle {
     fn draw(&self, renderer: &Renderer);
     fn move_horizontally(&mut self, x: i16);
     fn right(&self) -> i16;
+}
+
+fn rightmost(obstacle_list: &Vec<Box<dyn Obstacle>>) -> i16 {
+    obstacle_list
+        .iter()
+        .map(|obstacle| obstacle.right())
+        .max_by(|x, y| x.cmp(&y))
+        .unwrap_or(0)
 }
 
 pub struct Platform {
@@ -220,7 +234,7 @@ impl Obstacle for Platform {
 }
 
 impl Platform {
-    fn new(
+    pub fn new(
         sheet: Rc<SpriteSheet>,
         position: Point,
         sprite_names: &[&str],
