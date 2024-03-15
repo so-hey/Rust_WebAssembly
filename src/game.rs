@@ -5,11 +5,12 @@ use crate::{
     engine::{
         self, Cell, Game, GameLoop, Image, KeyState, Point, Rect, Renderer, Sheet, SpriteSheet,
     },
-    segments::stone_and_platform,
+    segments::{platform_and_stone, stone_and_platform},
 };
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use gloo_utils::format::JsValueSerdeExt;
+use rand::prelude::*;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsValue;
 use web_sys::HtmlImageElement;
@@ -18,7 +19,7 @@ const HEIGHT: i16 = 600;
 const TIMELINE_MINIMUM: i16 = 1000;
 const OBSTACLE_BUFFER: i16 = 20;
 
-macro_rules! log {
+macro_rules! _log {
     ( $( $t:tt )* ) => {
         web_sys::console::log_1(&format!( $( $t )* ).into());
     };
@@ -36,6 +37,28 @@ pub struct Walk {
 impl Walk {
     fn velocity(&self) -> i16 {
         -self.boy.walk_speed()
+    }
+
+    fn generate_next_segment(&mut self) {
+        let mut rng = thread_rng();
+        let next_segment = rng.gen_range(0..=1);
+
+        let mut next_obstacles = match next_segment {
+            0 => stone_and_platform(
+                self.stone.clone(),
+                self.obstacle_sheet.clone(),
+                self.timeline + OBSTACLE_BUFFER,
+            ),
+            1 => platform_and_stone(
+                self.stone.clone(),
+                self.obstacle_sheet.clone(),
+                self.timeline + OBSTACLE_BUFFER,
+            ),
+            _ => vec![],
+        };
+
+        self.timeline = rightmost(&next_obstacles);
+        self.obstacles.append(&mut next_obstacles);
     }
 }
 
@@ -125,14 +148,7 @@ impl Game for WalkTheDog {
             });
 
             if walk.timeline < TIMELINE_MINIMUM {
-                let mut next_obstacles = stone_and_platform(
-                    walk.stone.clone(),
-                    walk.obstacle_sheet.clone(),
-                    walk.timeline + OBSTACLE_BUFFER,
-                );
-
-                walk.timeline = rightmost(&next_obstacles);
-                walk.obstacles.append(&mut next_obstacles);
+                walk.generate_next_segment();
             } else {
                 walk.timeline += velocity;
             }
@@ -264,16 +280,6 @@ impl Platform {
         }
     }
 
-    fn destination_box(&self) -> Rect {
-        let platform = self.sheet.cell("13.png").expect("13.png does not exist");
-
-        Rect::new(
-            self.position,
-            (platform.frame.w * 3).into(),
-            platform.frame.h.into(),
-        )
-    }
-
     fn bounding_boxes(&self) -> &Vec<Rect> {
         &self.bounding_boxes
     }
@@ -402,6 +408,9 @@ impl RedHatBoyStateMachine {
             (RedHatBoyStateMachine::Running(state), Event::Land(position)) => {
                 state.land_on(position).into()
             }
+            (RedHatBoyStateMachine::Sliding(state), Event::Land(position)) => {
+                state.land_on(position).into()
+            }
             _ => self,
         }
     }
@@ -433,7 +442,7 @@ impl RedHatBoyStateMachine {
     }
 }
 
-struct RedHatBoy {
+pub struct RedHatBoy {
     state_machine: RedHatBoyStateMachine,
     sprite_sheet: Sheet,
     image: HtmlImageElement,
@@ -557,7 +566,7 @@ mod red_hat_boy_states {
     const FALLING_FRAMES: u8 = 30;
 
     const RUNNING_SPEED: i16 = 3;
-    const JUMP_SPEED: i16 = -25;
+    const JUMP_SPEED: i16 = -20;
     const GRAVITY: i16 = 1;
     const TERMINAL_VELOCITY: i16 = 20;
 
@@ -717,6 +726,13 @@ mod red_hat_boy_states {
             }
         }
 
+        pub fn land_on(self, position: i16) -> RedHatBoyState<Sliding> {
+            RedHatBoyState {
+                context: self.context.set_on(position),
+                _state: Sliding {},
+            }
+        }
+
         pub fn knock_out(self) -> RedHatBoyState<Falling> {
             RedHatBoyState {
                 context: self.context.reset_frame().stop(),
@@ -747,7 +763,7 @@ mod red_hat_boy_states {
 
         pub fn land_on(self, position: i16) -> RedHatBoyState<Running> {
             RedHatBoyState {
-                context: self.context.reset_frame().set_on(position as i16),
+                context: self.context.reset_frame().set_on(position),
                 _state: Running {},
             }
         }
@@ -781,7 +797,7 @@ mod red_hat_boy_states {
             }
         }
 
-        pub fn knock_out(mut self) -> RedHatBoyState<KnockedOut> {
+        pub fn knock_out(self) -> RedHatBoyState<KnockedOut> {
             RedHatBoyState {
                 context: self.context,
                 _state: KnockedOut {},

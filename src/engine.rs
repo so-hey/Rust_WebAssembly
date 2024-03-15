@@ -93,7 +93,7 @@ pub struct GameLoop {
 }
 
 impl GameLoop {
-    pub async fn start(mut game: impl Game + 'static) -> Result<()> {
+    pub async fn start(game: impl Game + 'static) -> Result<()> {
         let mut keyevent_receiver = prepare_input()?;
         let mut game = game.initialize().await?;
         let mut game_loop = GameLoop {
@@ -116,7 +116,7 @@ impl GameLoop {
             }
             game_loop.last_frame = perf;
             game.draw(&renderer);
-            browser::request_animation_frame(f.borrow().as_ref().unwrap());
+            browser::request_animation_frame(f.borrow().as_ref().unwrap()).unwrap();
         }));
 
         browser::request_animation_frame(
@@ -267,12 +267,12 @@ pub async fn load_image(source: &str) -> Result<HtmlImageElement> {
 
     let success_callback = browser::closure_once(move || {
         if let Some(success_tx) = success_tx.lock().ok().and_then(|mut opt| opt.take()) {
-            success_tx.send(Ok(()));
+            success_tx.send(Ok(())).unwrap();
         }
     });
     let error_callback = browser::closure_once(move || {
         if let Some(error_tx) = error_tx.lock().ok().and_then(|mut opt| opt.take()) {
-            error_tx.send(Ok(()));
+            error_tx.send(Ok(())).unwrap();
         }
     });
 
@@ -321,13 +321,15 @@ fn prepare_input() -> Result<UnboundedReceiver<KeyPress>> {
     let onkeydown = browser::closure_wrap(Box::new(move |keycode: web_sys::KeyboardEvent| {
         keydown_sender
             .borrow_mut()
-            .start_send(KeyPress::KeyDown(keycode));
+            .start_send(KeyPress::KeyDown(keycode))
+            .unwrap();
     }) as Box<dyn FnMut(web_sys::KeyboardEvent)>);
 
     let onkeyup = browser::closure_wrap(Box::new(move |keycode: web_sys::KeyboardEvent| {
         keyup_sender
             .borrow_mut()
-            .start_send(KeyPress::KeyUp(keycode));
+            .start_send(KeyPress::KeyUp(keycode))
+            .unwrap();
     }) as Box<dyn FnMut(web_sys::KeyboardEvent)>);
 
     browser::window()?.set_onkeydown(Some(onkeydown.as_ref().unchecked_ref()));

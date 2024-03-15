@@ -62,7 +62,7 @@ pub async fn fetch_json(json_path: &str) -> Result<JsValue> {
 
     JsFuture::from(
         resp.json()
-            .map_err(|err| anyhow!("Could not get JSON from response"))?,
+            .map_err(|_err| anyhow!("Could not get JSON from response"))?,
     )
     .await
     .map_err(|err| anyhow!("error fetching JSON {:#?}", err))
